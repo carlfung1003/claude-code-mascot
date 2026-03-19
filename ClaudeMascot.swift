@@ -409,6 +409,21 @@ class StateManager: ObservableObject {
             self.hidden = isHidden
         }
     }
+
+    func removeSession(_ sessionId: String) {
+        guard var raw = try? Data(contentsOf: URL(fileURLWithPath: stateFilePath)),
+              var dict = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
+              var sessions = dict["sessions"] as? [String: Any]
+        else { return }
+
+        sessions.removeValue(forKey: sessionId)
+        dict["sessions"] = sessions
+
+        if let jsonData = try? JSONSerialization.data(withJSONObject: dict),
+           let jsonStr = String(data: jsonData, encoding: .utf8) {
+            try? jsonStr.write(toFile: stateFilePath, atomically: true, encoding: .utf8)
+        }
+    }
 }
 
 // MARK: - Animation Modifiers
@@ -494,6 +509,7 @@ struct CatImageView: View {
 struct SessionMascotView: View {
     let session: SessionData
     let mascotSize: CGFloat
+    var onRemove: (() -> Void)?
     @State private var isHovering = false
 
     private var glowColor: Color {
@@ -530,6 +546,11 @@ struct SessionMascotView: View {
                         .font(.system(size: mascotSize * 0.22))
                         .offset(x: mascotSize * 0.38, y: -(mascotSize * 0.38))
                         .modifier(SparkleEffect())
+                }
+            }
+            .contextMenu {
+                Button("Remove \(session.label)") {
+                    onRemove?()
                 }
             }
 
@@ -612,7 +633,9 @@ struct MascotView: View {
     var body: some View {
         VStack(spacing: 6) {
             ForEach(stateManager.sessions) { session in
-                SessionMascotView(session: session, mascotSize: stateManager.mascotSize)
+                SessionMascotView(session: session, mascotSize: stateManager.mascotSize) {
+                    stateManager.removeSession(session.id)
+                }
             }
         }
         .padding(6)

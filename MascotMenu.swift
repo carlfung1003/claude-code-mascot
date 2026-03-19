@@ -29,8 +29,22 @@ class MenuHandler: NSObject {
         updateState { _ in }
     }
 
+    @objc func restartOverlay() {
+        // Kill and relaunch the overlay
+        let kill = Process()
+        kill.launchPath = "/usr/bin/pkill"
+        kill.arguments = ["-f", "ClaudeMascot"]
+        try? kill.run()
+        kill.waitUntilExit()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            let launch = Process()
+            launch.launchPath = "/Users/cfung/.claude/mascot/ClaudeMascot"
+            try? launch.run()
+        }
+    }
+
     @objc func quitAll() {
-        // Kill the mascot overlay too
         let task = Process()
         task.launchPath = "/usr/bin/pkill"
         task.arguments = ["-f", "ClaudeMascot"]
@@ -79,6 +93,10 @@ sessionItem.tag = 999
 menu.addItem(sessionItem)
 
 menu.addItem(NSMenuItem.separator())
+
+let restartItem = NSMenuItem(title: "Restart Overlay", action: #selector(MenuHandler.restartOverlay), keyEquivalent: "r")
+restartItem.target = handler
+menu.addItem(restartItem)
 
 let quitItem = NSMenuItem(title: "Quit Mascot", action: #selector(MenuHandler.quitAll), keyEquivalent: "q")
 quitItem.target = handler
