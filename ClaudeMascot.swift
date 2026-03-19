@@ -122,6 +122,7 @@ struct SessionInfo: Codable {
 struct StateFile: Codable {
     var sessions: [String: SessionInfo]
     var mascotSize: Double?  // configurable size (default 48)
+    var hidden: Bool?        // toggle visibility
 }
 
 // MARK: - Color Parsing
@@ -257,6 +258,7 @@ class TranscriptScanner {
 class StateManager: ObservableObject {
     @Published var sessions: [SessionData] = []
     @Published var mascotSize: CGFloat = 56
+    @Published var hidden: Bool = false
 
     private var timer: Timer?
     private var transcriptTimer: Timer?
@@ -336,12 +338,45 @@ class StateManager: ObservableObject {
 
     private func readState() {
         guard FileManager.default.fileExists(atPath: stateFilePath),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: stateFilePath)),
-              let stateFile = try? JSONDecoder().decode(StateFile.self, from: data)
+              let data = try? Data(contentsOf: URL(fileURLWithPath: stateFilePath))
         else {
             DispatchQueue.main.async { self.sessions = [] }
             return
         }
+
+        // Use JSONSerialization for robustness (Codable fails on extra/missing keys)
+        guard let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            DispatchQueue.main.async { self.sessions = [] }
+            return
+        }
+
+        // Parse hidden + size from top level
+        let isHidden = raw["hidden"] as? Bool ?? false
+        let size = CGFloat(raw["mascotSize"] as? Double ?? 56)
+
+        // Parse sessions
+        guard let sessionsDict = raw["sessions"] as? [String: [String: Any]] else {
+            DispatchQueue.main.async {
+                self.sessions = []
+                self.hidden = isHidden
+                self.mascotSize = max(32, min(120, size))
+            }
+            return
+        }
+
+        let stateFile = StateFile(
+            sessions: sessionsDict.mapValues { val in
+                SessionInfo(
+                    state: val["state"] as? String ?? "idle",
+                    timestamp: val["timestamp"] as? Double ?? 0,
+                    label: val["label"] as? String,
+                    color: val["color"] as? String,
+                    cat: val["cat"] as? String
+                )
+            },
+            mascotSize: raw["mascotSize"] as? Double,
+            hidden: isHidden
+        )
 
         let now = Date().timeIntervalSince1970
         let active = stateFile.sessions
@@ -368,11 +403,10 @@ class StateManager: ObservableObject {
             }
             .sorted { $0.label.lowercased() < $1.label.lowercased() }
 
-        let size = CGFloat(stateFile.mascotSize ?? 56)
-
         DispatchQueue.main.async {
             self.sessions = active
-            self.mascotSize = max(32, min(120, size))  // clamp 32–120
+            self.mascotSize = max(32, min(120, size))
+            self.hidden = isHidden
         }
     }
 }
@@ -617,11 +651,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         stateManager.startMonitoring()
 
-        // Resize and show/hide based on sessions
+        // Resize and show/hide based on sessions + hidden flag
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             let count = self.stateManager.sessions.count
             let size = self.stateManager.mascotSize
+            let isHidden = self.stateManager.hidden
+
+            // Hide/show based on hidden flag
+            if isHidden {
+                self.panel.orderOut(nil)
+                return
+            }
 
             if count > 0 {
                 let itemHeight = size + 30  // image + label + spacing
@@ -634,7 +675,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 frame.origin.y += (oldHeight - height)
                 self.panel.setFrame(frame, display: true)
 
-                if self.lastCount == 0 {
+                if self.lastCount == 0 || !self.panel.isVisible {
                     self.positionPanel()
                     self.panel.orderFront(nil)
                 }
@@ -664,11 +705,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             display: true
         )
     }
+
 }
 
 // MARK: - Entry Point
 
 let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
 let delegate = AppDelegate()
 app.delegate = delegate
+
 app.run()
