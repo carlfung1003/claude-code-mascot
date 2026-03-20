@@ -110,6 +110,15 @@ if os.path.exists(state_file):
 # Preserve existing session fields (color, cat) if not explicitly overridden
 existing = data.get('sessions', {}).get(session_id, {})
 
+# Smart "waiting" logic: only set waiting if currently "thinking" (mid-work).
+# If state is already "done", a Notification is just an alert, not a real wait.
+if state == 'waiting':
+    current_state = existing.get('state', '')
+    current_time = existing.get('timestamp', 0)
+    if current_state == 'done' and (time.time() - current_time) < 5:
+        # Stop fired recently → this is just an end-of-response alert, stay "done"
+        state = 'done'
+
 session_data = {
     'state': state,
     'timestamp': time.time(),
