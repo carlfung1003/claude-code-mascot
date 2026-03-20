@@ -379,16 +379,25 @@ class StateManager: ObservableObject {
         )
 
         let now = Date().timeIntervalSince1970
-        let active = stateFile.sessions
+        // Sort by timestamp first so oldest sessions get first pick of cats
+        let filtered = stateFile.sessions
             .filter { now - $0.value.timestamp < 28800 }  // 8 hours
-            .map { (key, value) in
-                // Resolve cat: explicit assignment > hash-based
+            .sorted { $0.value.timestamp < $1.value.timestamp }
+
+        // Assign cats sequentially — no duplicates until > 5 sessions
+        var usedCatIndices: [Int] = []
+        let active = filtered
+            .enumerated()
+            .map { (index, entry) in
+                let (key, value) = entry
                 let cat: CatCharacter
                 if let assignedName = value.cat,
                    let found = catPool.first(where: { $0.id == assignedName.lowercased() }) {
                     cat = found
                 } else {
-                    cat = catForSession(key)
+                    // Sequential: each session gets the next cat in order
+                    let catIndex = index % catPool.count
+                    cat = catPool[catIndex]
                 }
 
                 return SessionData(
