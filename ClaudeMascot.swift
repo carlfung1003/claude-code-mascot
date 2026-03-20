@@ -41,11 +41,9 @@ let robotPool: [MascotCharacter] = [
 
 // Chiikawa collection
 let chiikawaPool: [MascotCharacter] = [
-    MascotCharacter(id: "chiikawa", name: "Chiikawa", subtitle: "ちいかわ", collection: "chiikawa", themeColor: Color(red: 0.95, green: 0.95, blue: 0.95)),
+    MascotCharacter(id: "chiikawa", name: "Chiikawa", subtitle: "ちいかわ", collection: "chiikawa", themeColor: Color(red: 1.0, green: 0.75, blue: 0.8)),
     MascotCharacter(id: "hachiware", name: "Hachiware", subtitle: "ハチワレ", collection: "chiikawa", themeColor: Color(red: 0.7, green: 0.85, blue: 0.95)),
-    MascotCharacter(id: "usagi", name: "Usagi", subtitle: "うさぎ", collection: "chiikawa", themeColor: Color(red: 1.0, green: 0.95, blue: 0.7)),
-    MascotCharacter(id: "momonga", name: "Momonga", subtitle: "モモンガ", collection: "chiikawa", themeColor: Color(red: 0.85, green: 0.7, blue: 0.55)),
-    MascotCharacter(id: "rakko", name: "Rakko", subtitle: "ラッコ", collection: "chiikawa", themeColor: Color(red: 0.65, green: 0.75, blue: 0.8)),
+    MascotCharacter(id: "usagi", name: "Usagi", subtitle: "うさぎ", collection: "chiikawa", themeColor: Color(red: 1.0, green: 0.9, blue: 0.6)),
 ]
 
 // All collections
