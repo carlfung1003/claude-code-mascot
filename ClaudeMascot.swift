@@ -411,13 +411,32 @@ class StateManager: ObservableObject {
     }
 
     func removeSession(_ sessionId: String) {
-        guard var raw = try? Data(contentsOf: URL(fileURLWithPath: stateFilePath)),
-              var dict = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
-              var sessions = dict["sessions"] as? [String: Any]
+        modifyState { dict in
+            var sessions = dict["sessions"] as? [String: Any] ?? [:]
+            sessions.removeValue(forKey: sessionId)
+            dict["sessions"] = sessions
+        }
+    }
+
+    func setSize(_ size: Double) {
+        modifyState { dict in
+            dict["mascotSize"] = max(32, min(120, size))
+        }
+    }
+
+    func toggleHide() {
+        modifyState { dict in
+            let hidden = dict["hidden"] as? Bool ?? false
+            dict["hidden"] = !hidden
+        }
+    }
+
+    private func modifyState(_ modify: (inout [String: Any]) -> Void) {
+        guard let raw = try? Data(contentsOf: URL(fileURLWithPath: stateFilePath)),
+              var dict = try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
         else { return }
 
-        sessions.removeValue(forKey: sessionId)
-        dict["sessions"] = sessions
+        modify(&dict)
 
         if let jsonData = try? JSONSerialization.data(withJSONObject: dict),
            let jsonStr = String(data: jsonData, encoding: .utf8) {
@@ -510,6 +529,8 @@ struct SessionMascotView: View {
     let session: SessionData
     let mascotSize: CGFloat
     var onRemove: (() -> Void)?
+    var onSetSize: ((Double) -> Void)?
+    var onToggleHide: (() -> Void)?
     @State private var isHovering = false
 
     private var glowColor: Color {
@@ -549,8 +570,34 @@ struct SessionMascotView: View {
                 }
             }
             .contextMenu {
+                Text("\(session.character.name) — \(session.label)")
+
+                Divider()
+
                 Button("Remove \(session.label)") {
                     onRemove?()
+                }
+
+                Divider()
+
+                Menu("Size") {
+                    ForEach([("Small", 56.0), ("Medium", 80.0), ("Large", 100.0), ("XL", 120.0)], id: \.0) { label, size in
+                        Button {
+                            onSetSize?(size)
+                        } label: {
+                            Text(label)
+                        }
+                    }
+                }
+
+                Divider()
+
+                Button("Hide Mascot") {
+                    onToggleHide?()
+                }
+
+                Button("Quit Mascot") {
+                    NSApp.terminate(nil)
                 }
             }
 
@@ -633,9 +680,13 @@ struct MascotView: View {
     var body: some View {
         VStack(spacing: 6) {
             ForEach(stateManager.sessions) { session in
-                SessionMascotView(session: session, mascotSize: stateManager.mascotSize) {
-                    stateManager.removeSession(session.id)
-                }
+                SessionMascotView(
+                    session: session,
+                    mascotSize: stateManager.mascotSize,
+                    onRemove: { stateManager.removeSession(session.id) },
+                    onSetSize: { size in stateManager.setSize(size) },
+                    onToggleHide: { stateManager.toggleHide() }
+                )
             }
         }
         .padding(6)
@@ -651,7 +702,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MascotMenuBar?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        // Menu bar must be created BEFORE setting accessory policy
+        menuBar = MascotMenuBar()
 
         let rootView = MascotView(stateManager: stateManager)
         let hostingView = NSHostingView(rootView: rootView)
@@ -674,7 +726,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.orderOut(nil)
 
         stateManager.startMonitoring()
-        menuBar = MascotMenuBar()
 
         // Resize and show/hide based on sessions + hidden flag
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in

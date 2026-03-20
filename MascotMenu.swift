@@ -12,15 +12,20 @@ class MascotMenuBar {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         stateFilePath = "\(home)/.claude/mascot/state.json"
 
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "🐱"
-
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         handler = MenuHandler(stateFilePath: stateFilePath)
         menu = NSMenu()
 
-        buildMenu()
-        statusItem.menu = menu
-        startPolling()
+        // Must configure button on main thread
+        DispatchQueue.main.async { [self] in
+            if let button = self.statusItem.button {
+                button.title = "🐱"
+                button.font = NSFont.systemFont(ofSize: 14)
+            }
+            self.buildMenu()
+            self.statusItem.menu = self.menu
+            self.startPolling()
+        }
     }
 
     private func buildMenu() {
