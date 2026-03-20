@@ -439,9 +439,14 @@ class StateManager: ObservableObject {
                     cat = pool[catIndex]
                 }
 
+                // Auto-idle: if no update in 5 minutes, show sleepy
+                let rawState = MascotState(rawValue: value.state) ?? .idle
+                let sessionAge = now - value.timestamp
+                let effectiveState = sessionAge > 300 ? .idle : rawState
+
                 return SessionData(
                     id: key,
-                    state: MascotState(rawValue: value.state) ?? .idle,
+                    state: effectiveState,
                     label: value.label ?? "unknown",
                     character: cat,
                     timestamp: value.timestamp,
