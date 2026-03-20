@@ -1,17 +1,18 @@
 import Cocoa
 import SwiftUI
 
-// MARK: - Cat Characters (replacing emoji pool)
+// MARK: - Character System
 
-struct CatCharacter: Identifiable {
+struct MascotCharacter: Identifiable {
     let id: String
     let name: String
-    let japaneseName: String
+    let subtitle: String      // Japanese name for cats, designation for robots
+    let collection: String    // "cats" or "robots"
     let themeColor: Color
 
     func imagePath(for emotion: CatEmotion) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/.claude/mascot/media/cats/\(id)/\(emotion.rawValue).png"
+        return "\(home)/.claude/mascot/media/\(collection)/\(id)/\(emotion.rawValue).png"
     }
 
     func loadImage(for emotion: CatEmotion) -> NSImage? {
@@ -20,17 +21,43 @@ struct CatCharacter: Identifiable {
     }
 }
 
-let catPool: [CatCharacter] = [
-    CatCharacter(id: "sakura", name: "Sakura", japaneseName: "桜", themeColor: Color(red: 1.0, green: 0.6, blue: 0.7)),
-    CatCharacter(id: "kuro", name: "Kuro", japaneseName: "黒", themeColor: Color(red: 0.4, green: 0.3, blue: 0.5)),
-    CatCharacter(id: "mochi", name: "Mochi", japaneseName: "餅", themeColor: Color(red: 1.0, green: 0.9, blue: 0.8)),
-    CatCharacter(id: "tora", name: "Tora", japaneseName: "虎", themeColor: Color(red: 1.0, green: 0.6, blue: 0.2)),
-    CatCharacter(id: "sora", name: "Sora", japaneseName: "空", themeColor: Color(red: 0.5, green: 0.6, blue: 0.9)),
+// Cat collection
+let catPool: [MascotCharacter] = [
+    MascotCharacter(id: "sakura", name: "Sakura", subtitle: "桜", collection: "cats", themeColor: Color(red: 1.0, green: 0.6, blue: 0.7)),
+    MascotCharacter(id: "kuro", name: "Kuro", subtitle: "黒", collection: "cats", themeColor: Color(red: 0.4, green: 0.3, blue: 0.5)),
+    MascotCharacter(id: "mochi", name: "Mochi", subtitle: "餅", collection: "cats", themeColor: Color(red: 1.0, green: 0.9, blue: 0.8)),
+    MascotCharacter(id: "tora", name: "Tora", subtitle: "虎", collection: "cats", themeColor: Color(red: 1.0, green: 0.6, blue: 0.2)),
+    MascotCharacter(id: "sora", name: "Sora", subtitle: "空", collection: "cats", themeColor: Color(red: 0.5, green: 0.6, blue: 0.9)),
 ]
 
-func catForSession(_ sessionId: String) -> CatCharacter {
-    let hash = abs(sessionId.hashValue)
-    return catPool[hash % catPool.count]
+// Robot collection
+let robotPool: [MascotCharacter] = [
+    MascotCharacter(id: "bolt", name: "Bolt", subtitle: "MK-1", collection: "robots", themeColor: Color(red: 0.3, green: 0.7, blue: 1.0)),
+    MascotCharacter(id: "nova", name: "Nova", subtitle: "NV-7", collection: "robots", themeColor: Color(red: 0.6, green: 0.4, blue: 0.9)),
+    MascotCharacter(id: "titan", name: "Titan", subtitle: "TX-5", collection: "robots", themeColor: Color(red: 1.0, green: 0.5, blue: 0.1)),
+    MascotCharacter(id: "pixel", name: "Pixel", subtitle: "PX-8", collection: "robots", themeColor: Color(red: 0.2, green: 0.8, blue: 0.3)),
+    MascotCharacter(id: "zero", name: "Zero", subtitle: "Z-0", collection: "robots", themeColor: Color(red: 0.5, green: 0.9, blue: 0.9)),
+]
+
+// All collections
+let allCollections: [String: [MascotCharacter]] = [
+    "cats": catPool,
+    "robots": robotPool,
+]
+
+// Active pool — read from state.json "collection" key, default "cats"
+func activePool(from stateFile: String) -> [MascotCharacter] {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: stateFile)),
+          let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let collection = dict["collection"] as? String,
+          let pool = allCollections[collection]
+    else { return catPool }
+    return pool
+}
+
+func catForSession(_ sessionId: String) -> MascotCharacter {
+    // This is now a fallback — actual assignment happens in StateManager
+    return catPool[0]
 }
 
 // MARK: - Cat Emotions (mapped from session state)
@@ -105,7 +132,7 @@ struct SessionData: Identifiable {
     let id: String
     let state: MascotState
     let label: String
-    let character: CatCharacter
+    let character: MascotCharacter
     let timestamp: Double
     let sessionColor: Color?  // from /color
     let assignedCat: String?  // explicit cat assignment
@@ -350,9 +377,11 @@ class StateManager: ObservableObject {
             return
         }
 
-        // Parse hidden + size from top level
+        // Parse hidden + size + collection from top level
         let isHidden = raw["hidden"] as? Bool ?? false
         let size = CGFloat(raw["mascotSize"] as? Double ?? 56)
+        let collectionName = raw["collection"] as? String ?? "cats"
+        let pool = allCollections[collectionName] ?? catPool
 
         // Parse sessions
         guard let sessionsDict = raw["sessions"] as? [String: [String: Any]] else {
@@ -390,14 +419,14 @@ class StateManager: ObservableObject {
             .enumerated()
             .map { (index, entry) in
                 let (key, value) = entry
-                let cat: CatCharacter
+                let cat: MascotCharacter
                 if let assignedName = value.cat,
-                   let found = catPool.first(where: { $0.id == assignedName.lowercased() }) {
+                   let found = pool.first(where: { $0.id == assignedName.lowercased() }) {
                     cat = found
                 } else {
-                    // Sequential: each session gets the next cat in order
-                    let catIndex = index % catPool.count
-                    cat = catPool[catIndex]
+                    // Sequential: each session gets the next character in order
+                    let catIndex = index % pool.count
+                    cat = pool[catIndex]
                 }
 
                 return SessionData(
@@ -437,6 +466,12 @@ class StateManager: ObservableObject {
         modifyState { dict in
             let hidden = dict["hidden"] as? Bool ?? false
             dict["hidden"] = !hidden
+        }
+    }
+
+    func setCollection(_ name: String) {
+        modifyState { dict in
+            dict["collection"] = name
         }
     }
 
@@ -512,7 +547,7 @@ struct SparkleEffect: ViewModifier {
 // MARK: - Cat Image View
 
 struct CatImageView: View {
-    let character: CatCharacter
+    let character: MascotCharacter
     let emotion: CatEmotion
     let size: CGFloat
 
@@ -525,7 +560,7 @@ struct CatImageView: View {
                 .frame(width: size, height: size)
         } else {
             // Fallback: show cat name if image not found
-            Text(character.japaneseName)
+            Text(character.subtitle)
                 .font(.system(size: size * 0.5))
                 .frame(width: size, height: size)
         }
@@ -540,6 +575,7 @@ struct SessionMascotView: View {
     var onRemove: (() -> Void)?
     var onSetSize: ((Double) -> Void)?
     var onToggleHide: (() -> Void)?
+    var onSetCollection: ((String) -> Void)?
     @State private var isHovering = false
 
     private var glowColor: Color {
@@ -601,6 +637,14 @@ struct SessionMascotView: View {
 
                 Divider()
 
+                Menu("Collection") {
+                    ForEach(Array(allCollections.keys.sorted()), id: \.self) { name in
+                        Button(name.capitalized) {
+                            onSetCollection?(name)
+                        }
+                    }
+                }
+
                 Button("Hide Mascot") {
                     onToggleHide?()
                 }
@@ -650,7 +694,7 @@ struct SessionMascotView: View {
     var tooltipView: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 4) {
-                Text("\(session.character.name) (\(session.character.japaneseName))")
+                Text("\(session.character.name) (\(session.character.subtitle))")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
@@ -694,7 +738,8 @@ struct MascotView: View {
                     mascotSize: stateManager.mascotSize,
                     onRemove: { stateManager.removeSession(session.id) },
                     onSetSize: { size in stateManager.setSize(size) },
-                    onToggleHide: { stateManager.toggleHide() }
+                    onToggleHide: { stateManager.toggleHide() },
+                    onSetCollection: { name in stateManager.setCollection(name) }
                 )
             }
         }
