@@ -1,15 +1,99 @@
 import Cocoa
 
-let stateFilePath = "/Users/cfung/.claude/mascot/state.json"
+// MARK: - Menu Bar Controller
 
-let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
+class MascotMenuBar {
+    private let statusItem: NSStatusItem
+    private let handler: MenuHandler
+    private let menu: NSMenu
+    private let stateFilePath: String
 
-let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-statusItem.button?.title = "🐱"
+    init() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        stateFilePath = "\(home)/.claude/mascot/state.json"
 
-// Menu actions handler
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.button?.title = "🐱"
+
+        handler = MenuHandler(stateFilePath: stateFilePath)
+        menu = NSMenu()
+
+        buildMenu()
+        statusItem.menu = menu
+        startPolling()
+    }
+
+    private func buildMenu() {
+        let toggleItem = NSMenuItem(title: "Toggle Mascot", action: #selector(MenuHandler.toggleMascot), keyEquivalent: "m")
+        toggleItem.keyEquivalentModifierMask = [.command, .shift]
+        toggleItem.target = handler
+        menu.addItem(toggleItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let sizeMenu = NSMenu()
+        for (label, size) in [("Small (56)", 56), ("Medium (80)", 80), ("Large (100)", 100), ("XL (120)", 120)] {
+            let item = NSMenuItem(title: label, action: #selector(MenuHandler.setSize(_:)), keyEquivalent: "")
+            item.tag = size
+            item.target = handler
+            sizeMenu.addItem(item)
+        }
+        let sizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        sizeItem.submenu = sizeMenu
+        menu.addItem(sizeItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let sessionItem = NSMenuItem(title: "Sessions: --", action: nil, keyEquivalent: "")
+        sessionItem.tag = 999
+        menu.addItem(sessionItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let restartItem = NSMenuItem(title: "Restart Overlay", action: #selector(MenuHandler.restartOverlay), keyEquivalent: "r")
+        restartItem.target = handler
+        menu.addItem(restartItem)
+
+        let quitItem = NSMenuItem(title: "Quit Mascot", action: #selector(MenuHandler.quitAll), keyEquivalent: "q")
+        quitItem.target = handler
+        menu.addItem(quitItem)
+    }
+
+    private func startPolling() {
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            guard let rawData = try? Data(contentsOf: URL(fileURLWithPath: self.stateFilePath)),
+                  let dict = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any]
+            else { return }
+
+            let hidden = dict["hidden"] as? Bool ?? false
+            let sessions = dict["sessions"] as? [String: Any] ?? [:]
+
+            self.statusItem.button?.title = hidden ? "😺" : "🐱"
+
+            if let item = self.menu.item(withTag: 999) {
+                item.title = "Sessions: \(sessions.count)"
+            }
+
+            if let sMenu = self.menu.item(withTitle: "Size")?.submenu {
+                let currentSize = Int(dict["mascotSize"] as? Double ?? 56)
+                for item in sMenu.items {
+                    item.state = item.tag == currentSize ? .on : .off
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Menu Actions
+
 class MenuHandler: NSObject {
+    let stateFilePath: String
+
+    init(stateFilePath: String) {
+        self.stateFilePath = stateFilePath
+    }
+
     @objc func toggleMascot() {
         updateState { data in
             let hidden = data["hidden"] as? Bool ?? false
@@ -24,22 +108,17 @@ class MenuHandler: NSObject {
         }
     }
 
-    @objc func resetPosition() {
-        // Touch state to trigger repositioning
-        updateState { _ in }
-    }
-
     @objc func restartOverlay() {
-        // Kill and relaunch the overlay
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
         let kill = Process()
         kill.launchPath = "/usr/bin/pkill"
-        kill.arguments = ["-f", "ClaudeMascot"]
+        kill.arguments = ["-x", "ClaudeMascot"]
         try? kill.run()
         kill.waitUntilExit()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             let launch = Process()
-            launch.launchPath = "/Users/cfung/.claude/mascot/ClaudeMascot"
+            launch.launchPath = "\(home)/.claude/mascot/ClaudeMascot"
             try? launch.run()
         }
     }
@@ -47,7 +126,7 @@ class MenuHandler: NSObject {
     @objc func quitAll() {
         let task = Process()
         task.launchPath = "/usr/bin/pkill"
-        task.arguments = ["-f", "ClaudeMascot"]
+        task.arguments = ["-x", "ClaudeMascot"]
         try? task.run()
         NSApp.terminate(nil)
     }
@@ -63,68 +142,3 @@ class MenuHandler: NSObject {
         }
     }
 }
-
-let handler = MenuHandler()
-
-let menu = NSMenu()
-
-let toggleItem = NSMenuItem(title: "Toggle Mascot", action: #selector(MenuHandler.toggleMascot), keyEquivalent: "m")
-toggleItem.keyEquivalentModifierMask = [.command, .shift]
-toggleItem.target = handler
-menu.addItem(toggleItem)
-
-menu.addItem(NSMenuItem.separator())
-
-let sizeMenu = NSMenu()
-for (label, size) in [("Small (56)", 56), ("Medium (80)", 80), ("Large (100)", 100), ("XL (120)", 120)] {
-    let item = NSMenuItem(title: label, action: #selector(MenuHandler.setSize(_:)), keyEquivalent: "")
-    item.tag = size
-    item.target = handler
-    sizeMenu.addItem(item)
-}
-let sizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
-sizeItem.submenu = sizeMenu
-menu.addItem(sizeItem)
-
-menu.addItem(NSMenuItem.separator())
-
-let sessionItem = NSMenuItem(title: "Sessions: --", action: nil, keyEquivalent: "")
-sessionItem.tag = 999
-menu.addItem(sessionItem)
-
-menu.addItem(NSMenuItem.separator())
-
-let restartItem = NSMenuItem(title: "Restart Overlay", action: #selector(MenuHandler.restartOverlay), keyEquivalent: "r")
-restartItem.target = handler
-menu.addItem(restartItem)
-
-let quitItem = NSMenuItem(title: "Quit Mascot", action: #selector(MenuHandler.quitAll), keyEquivalent: "q")
-quitItem.target = handler
-menu.addItem(quitItem)
-
-statusItem.menu = menu
-
-// Poll state.json to update icon + session count
-Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-    guard let rawData = try? Data(contentsOf: URL(fileURLWithPath: stateFilePath)),
-          let dict = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any]
-    else { return }
-
-    let hidden = dict["hidden"] as? Bool ?? false
-    let sessions = dict["sessions"] as? [String: Any] ?? [:]
-
-    statusItem.button?.title = hidden ? "😺" : "🐱"
-
-    if let item = menu.item(withTag: 999) {
-        item.title = "Sessions: \(sessions.count)"
-    }
-
-    if let sMenu = menu.item(withTitle: "Size")?.submenu {
-        let currentSize = Int(dict["mascotSize"] as? Double ?? 56)
-        for item in sMenu.items {
-            item.state = item.tag == currentSize ? .on : .off
-        }
-    }
-}
-
-app.run()

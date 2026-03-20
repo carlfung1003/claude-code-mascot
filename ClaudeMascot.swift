@@ -11,7 +11,7 @@ struct CatCharacter: Identifiable {
 
     func imagePath(for emotion: CatEmotion) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/Projects/claude-mascot/media/cats/\(id)/\(emotion.rawValue).png"
+        return "\(home)/.claude/mascot/media/cats/\(id)/\(emotion.rawValue).png"
     }
 
     func loadImage(for emotion: CatEmotion) -> NSImage? {
@@ -165,7 +165,7 @@ class TranscriptScanner {
     /// Scan all recent transcript files for /color and /rename commands
     func scanTranscripts() -> [TranscriptInfo] {
         var results: [TranscriptInfo] = []
-        let projectDir = "\(home)/.claude/projects/-Users-cfung"
+        let projectDir = "\(home)/.claude/projects/-Users-carlfung"
 
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: projectDir) else {
             return results
@@ -648,6 +648,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var panel: NSPanel!
     var stateManager = StateManager()
     private var lastCount = 0
+    private var menuBar: MascotMenuBar?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -673,6 +674,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.orderOut(nil)
 
         stateManager.startMonitoring()
+        menuBar = MascotMenuBar()
 
         // Resize and show/hide based on sessions + hidden flag
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -733,9 +735,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 // MARK: - Entry Point
 
-let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
-let delegate = AppDelegate()
-app.delegate = delegate
-
-app.run()
+@main
+enum MascotApp {
+    static func main() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
+    }
+}
